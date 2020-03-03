@@ -69,7 +69,7 @@ class ScoreToWord:
             return rest_word
 
         ordered_notes = sorted(notes, key=lambda n: n.pitch.midi, reverse=True)
-        word = ''.join([note.name for note in ordered_notes])
+        word = '_'.join([note.name.lower() for note in ordered_notes])
         return word
 
 
@@ -114,7 +114,7 @@ class ScoreToVec:
         vector - arbitrary input embedding
         Returns - the topn most similar words to that vector
         '''
-        return self.model.similar_by_vector(vector, topn=1)[0]
+        return self.model.similar_by_vector(vector, topn=1)[0][0]
 
     def vocab(self):
         return self.model.vocab

@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 import numpy as np
 from hmmlearn import hmm
+import music21
 
 #####################################################
 # Get scores and corresponding word representations
@@ -48,8 +49,16 @@ print(myScoreToVec.decode(vec_model.vectors[0]))
 ####################################
 print('Training type model...')
 myTypeModel = BayesianGaussianTypeModel()
-myTypeModel.fit(vec_model.vectors)
+q = input('Load cached type model? [y/n]:')
+TYPE_MODEL_PATH = '.type_model.pickle'
+if len(q) > 0 and q[0] == 'y':
+    vec_model = myScoreToVec.load_model()
+    myTypeModel.load_model(TYPE_MODEL_PATH)
+else:
+    myTypeModel.fit(vec_model.vectors)
+    myTypeModel.save_model(TYPE_MODEL_PATH)
 labels = myTypeModel.predict_multi(vec_model.vectors)
+print(labels)
 
 plt.hist(labels, bins=32)
 
@@ -81,5 +90,45 @@ print(hmm_model.transmat_)
 # Test Generation #
 ###################
 print('Testing generation...')
-X, Z = hmm_model.sample(20)
-print(X)
+# Generate types
+X, Z = hmm_model.sample(40)
+
+# Discretize types
+types = [int(round(i[0], 0)) for i in X]
+print(types)
+
+# Get randomized vector from type distribution
+vec_out = []
+for i in types:
+    vec_out.append(myTypeModel.emit(i))
+
+# convert into sequence of note combinations
+new_score = []
+for vec in vec_out:
+    try:
+        if vec == None: # handle if no emition could be generated
+            new_score.append('XREST')
+    except ValueError: # thrown if vec is a vector and not None
+        new_score.append(myScoreToVec.decode(vec))
+print(new_score)
+
+# Make it ingestable by music21 and display music
+music_representation = 'tinynotation: 3/4 '
+new_note_sequences = []
+for i in new_score:
+    notes = i.split('_')
+    print(notes)
+    num = len(notes)
+    if num == 1 and notes[0] == 'XREST':
+        continue # TODO: Make into actual rest
+    # TODO: Music21 only supports multiples of 4 or something so 5 results in errors
+    cap = 4
+    if num > cap:
+        num = cap
+    start_note = notes[0] + str(4*num)
+    new_notes = ' '.join([start_note] + notes[1:num])
+    new_note_sequences += [new_notes]
+music_representation += ' '.join(new_note_sequences)
+print(music_representation)
+# Now play new music
+music21.converter.parse(music_representation).show()
