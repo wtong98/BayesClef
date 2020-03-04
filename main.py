@@ -4,25 +4,29 @@ serve as a script that represents the current functionality
 of the project
 '''
 # Local imports
-from music2vec import ScoreToWord, ScoreToVec
-from type_models import BayesianGaussianTypeModel
+from internal.music2vec import ScoreToWord, ScoreToVec
+from internal.type_models import BayesianGaussianTypeModel
 
 # General imports
 import matplotlib.pyplot as plt
-from tqdm import tqdm
 import numpy as np
+
 from hmmlearn import hmm
-import music21
+from music21 import converter
+from tqdm import tqdm
+
+SCORE_WORD_PATH = '.score_word_cache.json'
+EMBEDDING_PATH = r'.embedding.wv'
+TYPE_MODEL_PATH = '.type_model.pickle'
 
 #####################################################
 # Get scores and corresponding word representations
 #####################################################
-score_word_cache = '.score_word_cache.json'
 myScoreToWord = ScoreToWord()
 q = input('Load cached words? [y/n]:')
 # Get score_words variable filled with scores converted to words
 if len(q) > 0 and q[0] == 'y':
-    score_words = myScoreToWord.load_score_words(score_word_cache)
+    score_words = myScoreToWord.load_score_words(SCORE_WORD_PATH)
 else:
     print('Loading/processing scores...')
     scores = myScoreToWord.get_scores()
@@ -32,7 +36,6 @@ else:
 ##############################
 # Now train a Word2Vec model #
 ##############################
-EMBEDDING_PATH = r'embedding.wv'
 myScoreToVec = ScoreToVec(EMBEDDING_PATH)
 q = input('Load cached embeddings? [y/n]:')
 if len(q) > 0 and q[0] == 'y':
@@ -50,7 +53,6 @@ print(myScoreToVec.decode(vec_model.vectors[0]))
 print('Training type model...')
 myTypeModel = BayesianGaussianTypeModel()
 q = input('Load cached type model? [y/n]:')
-TYPE_MODEL_PATH = '.type_model.pickle'
 if len(q) > 0 and q[0] == 'y':
     vec_model = myScoreToVec.load_model()
     myTypeModel.load_model(TYPE_MODEL_PATH)
@@ -61,6 +63,7 @@ labels = myTypeModel.predict_multi(vec_model.vectors)
 print(labels)
 
 plt.hist(labels, bins=32)
+plt.show()
 
 
 #################
@@ -113,7 +116,7 @@ for vec in vec_out:
 print(new_score)
 
 # Make it ingestable by music21 and display music
-music_representation = 'tinynotation: 3/4 '
+music_representation = 'tinynotation: 4/4 '
 new_note_sequences = []
 for i in new_score:
     notes = i.split('_')
@@ -131,4 +134,4 @@ for i in new_score:
 music_representation += ' '.join(new_note_sequences)
 print(music_representation)
 # Now play new music
-music21.converter.parse(music_representation).show()
+converter.parse(music_representation).show()

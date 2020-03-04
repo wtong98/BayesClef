@@ -92,14 +92,14 @@ def _precise_round(val, precision=10):
 # TODO: tune word2vec params
 # TODO: evaluate freqeuency histogram
 texts = list(tqdm(convert_to_texts(scores)))
-model = Word2Vec(sentences=texts,
-                 size=32,
-                 min_count=1,
-                 window=4,
-                 workers=4,
-                 sg=1)
-
-model.wv.save(EMBEDDING_PATH)
+# model = Word2Vec(sentences=texts,
+#                  size=32,
+#                  min_count=1,
+#                  window=4,
+#                  workers=4,
+#                  sg=1)
+#
+# model.wv.save(EMBEDDING_PATH)
 
 
 # <codecell>

@@ -5,4 +5,6 @@ __pycache__/
 .ipynb_checkpoints
 
 # training files
-embedding.wv
+*.wv
+*.json
+*.pickle
