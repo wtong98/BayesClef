@@ -3,63 +3,38 @@ This script brings all the parts together and should
 serve as a script that represents the current functionality
 of the project
 '''
-# Local imports
 from internal.music2vec import ScoreToWord, ScoreToVec
 from internal.type_models import BayesianGaussianTypeModel
 
-# General imports
+import os.path
+import pickle
+
 import matplotlib.pyplot as plt
 import numpy as np
 
 from hmmlearn import hmm
 from music21 import converter
-from tqdm import tqdm
 
-SCORE_WORD_PATH = '.score_word_cache.json'
-EMBEDDING_PATH = r'.embedding.wv'
-TYPE_MODEL_PATH = '.type_model.pickle'
-
-#####################################################
-# Get scores and corresponding word representations
-#####################################################
-myScoreToWord = ScoreToWord()
-q = input('Load cached words? [y/n]:')
-# Get score_words variable filled with scores converted to words
-if len(q) > 0 and q[0] == 'y':
-    score_words = myScoreToWord.load_score_words(SCORE_WORD_PATH)
-else:
-    print('Loading/processing scores...')
-    scores = myScoreToWord.get_scores()
-    score_words = list(tqdm(myScoreToWord.scores_to_text(scores)))
-    myScoreToWord.save_score_words(score_words, score_word_cache)
-
-##############################
-# Now train a Word2Vec model #
-##############################
-myScoreToVec = ScoreToVec(EMBEDDING_PATH)
-q = input('Load cached embeddings? [y/n]:')
-if len(q) > 0 and q[0] == 'y':
-    vec_model = myScoreToVec.load_model()
-else:
-    print('Training Word2Vec model...')
-    vec_model = myScoreToVec.train_model(score_words)
-
-print(myScoreToVec.decode(vec_model.vectors[0]))
+SCORE_WORD_PATH = r'data/score_word_cache.json'
+EMBEDDING_PATH = r'data/embedding.wv'
+TYPE_MODEL_PATH = r'data/type_model.pickle'
+HMM_PATH = r'data/hmm.pickle'
 
 
-####################################
-# Now Train Gaussian Mixture Model #
-####################################
+# print('Searching scores...')
+# scores = ScoreToWord.query_scores(artist='bach')
+scores = []
+score_to_word = ScoreToWord(scores, path=SCORE_WORD_PATH)
+
+score_word_to_vec = ScoreToVec(score_to_word.scores, path=EMBEDDING_PATH)
+
 print('Training type model...')
-myTypeModel = BayesianGaussianTypeModel()
-q = input('Load cached type model? [y/n]:')
-if len(q) > 0 and q[0] == 'y':
-    vec_model = myScoreToVec.load_model()
-    myTypeModel.load_model(TYPE_MODEL_PATH)
-else:
-    myTypeModel.fit(vec_model.vectors)
+myTypeModel = BayesianGaussianTypeModel(path=TYPE_MODEL_PATH)
+if not os.path.exists(TYPE_MODEL_PATH):
+    myTypeModel.fit(score_word_to_vec.embedding.vectors)
     myTypeModel.save_model(TYPE_MODEL_PATH)
-labels = myTypeModel.predict_multi(vec_model.vectors)
+
+labels = myTypeModel.predict(score_word_to_vec.embedding.vectors)
 print(labels)
 
 plt.hist(labels, bins=32)
@@ -69,41 +44,43 @@ plt.show()
 #################
 # Now Train HMM #
 #################
+# TODO: formalize into object
 print('Training generative model...')
-word_to_label = {}
+if not os.path.exists(HMM_PATH):
+    word_to_label = {}
 
-vocab = myScoreToVec.vocab()
-for word in vocab:
-    idx = vocab[word].index
-    word_to_label[word] = labels[idx]
+    vocab = score_word_to_vec.vocab()
+    for word in vocab:
+        idx = vocab[word].index
+        word_to_label[word] = labels[idx]
 
-def _text_to_seq(text):
-    return np.array([[word_to_label[word]] for word in text])
+    def _text_to_seq(text):
+        return np.array([[word_to_label[word]] for word in text])
 
-sequences = [_text_to_seq(text) for text in score_words]
+    sequences = [_text_to_seq(text) for text in score_to_word.scores]
 
-# Now actually train
-hmm_model = hmm.GaussianHMM(n_components=16)
-lengths = [len(seq) for seq in sequences]
-sequences = np.concatenate(sequences)
-hmm_model.fit(sequences, lengths=lengths)
-print(hmm_model.transmat_)
+    # Now actually train
+    hmm_model = hmm.MultinomialHMM(n_components=16)
+    lengths = [len(seq) for seq in sequences]
+    sequences = np.concatenate(sequences)
+    hmm_model.fit(sequences, lengths=lengths)
+    print(hmm_model.transmat_)
+    with open(HMM_PATH, "wb") as file: pickle.dump(hmm_model, file)
+else:
+    hmm_model = None
+    with open(HMM_PATH, "rb") as file: hmm_model = pickle.load(file)
 
 ###################
 # Test Generation #
 ###################
 print('Testing generation...')
 # Generate types
-X, Z = hmm_model.sample(40)
-
-# Discretize types
-types = [int(round(i[0], 0)) for i in X]
+types, Z = hmm_model.sample(40)
+types = types.flatten()
 print(types)
 
 # Get randomized vector from type distribution
-vec_out = []
-for i in types:
-    vec_out.append(myTypeModel.emit(i))
+vec_out = [myTypeModel.emit(i) for i in types]
 
 # convert into sequence of note combinations
 new_score = []
@@ -112,7 +89,7 @@ for vec in vec_out:
         if vec == None: # handle if no emition could be generated
             new_score.append('XREST')
     except ValueError: # thrown if vec is a vector and not None
-        new_score.append(myScoreToVec.decode(vec))
+        new_score.append(score_word_to_vec.decode(vec))
 print(new_score)
 
 # Make it ingestable by music21 and display music

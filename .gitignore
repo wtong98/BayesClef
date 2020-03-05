@@ -8,3 +8,5 @@ __pycache__/
 *.wv
 *.json
 *.pickle
+data/
+data/**/*
