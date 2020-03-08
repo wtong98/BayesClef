@@ -1,6 +1,7 @@
 import json
 import os
 import os.path
+import pickle
 from collections import defaultdict
 
 from gensim.models import Word2Vec
@@ -13,11 +14,16 @@ from tqdm import tqdm
 
 import numpy as np
 
+class ScoreFetcher:
+    '''
+    Load scores
+    '''
+    def __init__(self, path: str = '', load=True):
+        self.save_path = path
 
-class ScoreToWord:
-    '''
-    Loads scores and converts them into word form
-    '''
+    def fetch(self):
+        self.scores = self.query_scores()
+        self._save_score_cache()
 
     @staticmethod
     def query_scores(artist='bach', debug=False):
@@ -26,13 +32,26 @@ class ScoreToWord:
             print('Loading {0} scores'.format(len(bundle)))
         return [metadata.parse() for metadata in bundle]
 
+    def load_cache(self):
+        s = open(self.save_path, 'rb').read()
+        self.scores = pickle.loads(s)
 
-    def __init__(self, raw_scores: list = [], path: str = '', load=True):
-        if os.path.exists(path) and load:
-            self.scores = self._load_score_words(path)
-        else:
-            self.scores = list(tqdm(self.scores_to_text(raw_scores)))
-            self._save_score_words(self.scores, path)
+    def _save_score_cache(self):
+        s = pickle.dumps(self.scores)
+        os.makedirs(os.path.dirname(self.save_path), exist_ok=True)
+        open(self.save_path, 'wb').write(s)
+
+class ScoreToWord:
+    '''
+    Convert scores into word form
+    '''
+
+    def __init__(self, path: str = ''):
+        self.save_path = path
+
+    def process(self, raw_scores):
+        self.scores = list(tqdm(self.scores_to_text(raw_scores)))
+        self._save_score_words(self.scores, self.save_path)
 
     def scores_to_text(self, scores, sampling_rate=0.5):
         for score in scores:
@@ -92,9 +111,9 @@ class ScoreToWord:
         in_text = json.dumps(scores)
         open(path, 'w').write(in_text)
 
-    def _load_score_words(self, file_name):
-        raw_text = open(file_name, 'r').read()
-        return json.loads(raw_text)
+    def load_cache(self):
+        raw_text = open(self.save_path, 'r').read()
+        self.scores = json.loads(raw_text)
 
 
 class ScoreToVec:

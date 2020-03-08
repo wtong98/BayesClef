@@ -3,7 +3,7 @@ This script brings all the parts together and should
 serve as a script that represents the current functionality
 of the project
 '''
-from internal.music2vec import ScoreToWord, ScoreToVec
+from internal.music2vec import ScoreFetcher, ScoreToWord, ScoreToVec
 from internal.type_models import BayesianGaussianTypeModel
 
 import os.path
@@ -15,18 +15,41 @@ import numpy as np
 from hmmlearn import hmm
 from music21 import converter
 
+SCORE_PATH = r'data/score_cache.json'
 SCORE_WORD_PATH = r'data/score_word_cache.json'
 EMBEDDING_PATH = r'data/embedding.wv'
 TYPE_MODEL_PATH = r'data/type_model.pickle'
 HMM_PATH = r'data/hmm.pickle'
 
+# Prepare for saving
+no_object_computes = True
+def should_compute(obj : object, prompt: str = 'Load cache'):
+    global no_object_computes
+    if no_object_computes:
+        inp = input(prompt + ' [y/n]?')
+        if len(inp) > 0 and inp[0] == 'n':
+            no_object_computes = False
+            return True
+        obj.load_cache()
+        return False
+    else:
+        return True
 
-# print('Searching scores...')
-# scores = ScoreToWord.query_scores(artist='bach')
-scores = []
-score_to_word = ScoreToWord(scores, path=SCORE_WORD_PATH)
 
-score_word_to_vec = ScoreToVec(score_to_word.scores, path=EMBEDDING_PATH)
+
+
+
+print('Loading/processing scores...')
+myScoreFetcher = ScoreFetcher(SCORE_PATH)
+if should_compute(myScoreFetcher, 'Load cached scores'):
+    myScoreFetcher.fetch()
+
+myScoreToWord = ScoreToWord(SCORE_WORD_PATH)
+if should_compute(myScoreToWord, 'Load cached words'):
+    myScoreToWord.process(myScoreFetcher.scores)
+
+print('Training embedding model...')
+score_word_to_vec = ScoreToVec(myScoreToWord.scores, path=EMBEDDING_PATH)
 
 print('Training type model...')
 myTypeModel = BayesianGaussianTypeModel(path=TYPE_MODEL_PATH)
@@ -57,7 +80,7 @@ if not os.path.exists(HMM_PATH):
     def _text_to_seq(text):
         return np.array([[word_to_label[word]] for word in text])
 
-    sequences = [_text_to_seq(text) for text in score_to_word.scores]
+    sequences = [_text_to_seq(text) for text in myScoreToWord.scores]
 
     # Now actually train
     hmm_model = hmm.MultinomialHMM(n_components=16)
