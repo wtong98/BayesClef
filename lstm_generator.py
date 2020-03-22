@@ -100,7 +100,7 @@ def predict(device, net, words, n_vocab, vocab_to_int, int_to_vocab, top_k=5):
     state_c = state_c.to(device)
     for w in words:
         #ix = torch.tensor([[vocab_to_int[w]]]).to(device)
-        ix = score_word_to_vec.embedding[w]
+        ix = torch.tensor([[score_word_to_vec.embedding[w]]])
         output, (state_h, state_c) = net(ix, (state_h, state_c))
 
     _, top_ix = torch.topk(output[0], k=top_k)
@@ -108,7 +108,7 @@ def predict(device, net, words, n_vocab, vocab_to_int, int_to_vocab, top_k=5):
     choice = np.random.choice(choices[0])
     for _ in range(100):
         #ix = torch.tensor([[choice]]).to(device)
-        ix = score_word_to_vec.embedding[int_to_vocab[choice]]
+        ix = torch.tensor([[score_word_to_vec.embedding[int_to_vocab[choice]]]])
         output, (state_h, state_c) = net(ix, (state_h, state_c))
 
         _, top_ix = torch.topk(output[0], k=top_k)
@@ -116,7 +116,7 @@ def predict(device, net, words, n_vocab, vocab_to_int, int_to_vocab, top_k=5):
         choice = np.random.choice(choices[0])
         words.append(int_to_vocab[choice])
 
-    print(' '.join(words))
+    print(words)
 
 
 ##################
