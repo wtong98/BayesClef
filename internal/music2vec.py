@@ -14,6 +14,10 @@ from tqdm import tqdm
 
 import numpy as np
 
+# Global vars
+START_WORD = '<START>'
+END_WORD = '<END>'
+
 class ScoreFetcher:
     '''
     Load scores
@@ -74,7 +78,8 @@ class ScoreToWord:
         end = score.flat.highestOffset
 
         text = [self._to_word(hist[i]) for i in np.arange(0, end, sampling_rate)]
-        return text
+        full_text = [START_WORD] + text + [END_WORD]
+        return full_text
 
     def _bin(self, notes, sampling_rate) -> defaultdict:
         hist = defaultdict(list)
