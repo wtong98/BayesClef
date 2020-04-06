@@ -170,6 +170,7 @@ def train(train_loader, learn_rate, hidden_dim=256, EPOCHS=20, model_type="GRU")
     return model
 
 def evaluate(model, test_x, test_y, label_scalers):
+    # NOTE: Still under construction
     model.eval()
     outputs = []
     targets = []
@@ -188,5 +189,34 @@ def evaluate(model, test_x, test_y, label_scalers):
     print("sMAPE: {}%".format(sMAPE*100))
     return outputs, targets, sMAPE
 
+def generate(model, top_k=1, max_length=30):
+    start_word = '<START>'
+    musical_piece = [start_word]
+    start_vec = torch.tensor([[score_word_to_vec.embedding[start_word]]])
+    should_stop = False
+    curr_vec = start_vec
+    curr_h = None # Starting hidden state
+    while not should_stop:
+        out, curr_h = model(curr_vec, curr_h)
+        softmax_out = list(out[0])
+        top_k_out = np.argsort(softmax_out)[-top_k:]
+        # TODO: Make random selection
+        choice = top_k_out[0]
+        next_word = int_to_vocab[choice]
+        print(next_word)
+        musical_piece.append(next_word)
+        # now update vector
+        curr_vec = torch.tensor([[score_word_to_vec.embedding[next_word]]])
+
+        if next_word == '<END>':
+            should_stop = True
+        elif len(musical_piece) - 1 > max_length:
+            should_stop = True
+            musical_piece.append('<END>')
+    return musical_piece
+
 lr = 0.001
-gru_model = train(get_batches, lr, model_type="GRU")
+gru_model = train(get_batches, lr, model_type="GRU", EPOCHS=100)
+
+genned_song = generate(gru_model)
+print(genned_song)
