@@ -141,6 +141,7 @@ class GRUNet(nn.Module):
         self.n_layers = n_layers
 
         self.gru = nn.GRU(input_dim, hidden_dim, n_layers, batch_first=True, dropout=drop_prob)
+        self.fc_deep0 = nn.Linear(hidden_dim, hidden_dim)
         self.fc = nn.Linear(hidden_dim, output_dim)
         self.softmax = nn.Softmax()
         self.relu = nn.ReLU()
@@ -148,7 +149,8 @@ class GRUNet(nn.Module):
     def forward(self, x, h):
         out, h = self.gru(x, h)
         #out = self.softmax(self.fc(self.relu(out[:,-1])))
-        out = self.softmax(self.fc(self.relu(out)))
+        fc0_out = self.relu(self.fc_deep0(self.relu(out)))
+        out = self.softmax(self.fc(fc0_out))
         return out, h
 
     def init_hidden(self, batch_size):
@@ -256,7 +258,7 @@ def generate(model, top_k=1, max_length=30):
             musical_piece.append('<END>')
     return musical_piece
 
-lr = 0.01
+lr = 0.001
 gru_model = train(get_batches, lr, model_type="GRU", EPOCHS=100)
 
 genned_song = generate(gru_model)
