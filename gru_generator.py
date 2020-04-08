@@ -64,7 +64,7 @@ for score in myScoreToWord.scores:
     score_vectors = [score_word_to_vec.embedding[i] for i in score]
     score_ints = [vocab_to_int[i] for i in score]
     # TODO: Add START and STOP tokens to beginning and end
-    X_train += [[[i] for i in score_vectors[:-1]]]
+    X_train += [[i for i in score_vectors[:-1]]]
     y_train += [[i for i in score_ints[1:]]]
 
 class Ticker:
@@ -102,11 +102,11 @@ def data_from_key(score_idx, place_idx):
     # Now handle if unable to complete because reached end of score
     if len(x_batch) < SEQ_SIZE:
         deficit = SEQ_SIZE - len(x_batch)
-        x_batch += [[score_word_to_vec.embedding['<END>']] for i in range(deficit)]
+        x_batch += [score_word_to_vec.embedding['<END>'] for i in range(deficit)]
         label_category += [vocab_to_int['<END>'] for i in range(deficit)]
 
-    return torch.tensor(x_batch), \
-            torch.tensor(label_category)
+    return x_batch, \
+            label_category
 
 def get_batches():
     ''' Extracts data into randomized batches
@@ -120,8 +120,8 @@ def get_batches():
         key = data_keys[idx]
         if len(batch[0]) < BATCH_SIZE:
             x, label = data_from_key(key[0], key[1])
-            batch[0].append(torch.tensor(x))
-            batch[1].append(torch.tensor(label))
+            batch[0].append(x)
+            batch[1].append(label)
         else:
             yield batch[0], batch[1]
             x, label = data_from_key(key[0], key[1])
@@ -147,7 +147,8 @@ class GRUNet(nn.Module):
 
     def forward(self, x, h):
         out, h = self.gru(x, h)
-        out = self.softmax(self.fc(self.relu(out[:,-1])))
+        #out = self.softmax(self.fc(self.relu(out[:,-1])))
+        out = self.softmax(self.fc(self.relu(out)))
         return out, h
 
     def init_hidden(self, batch_size):
@@ -179,22 +180,29 @@ def train(train_loader, learn_rate, hidden_dim=256, EPOCHS=20, model_type="GRU")
         avg_loss = 0.
         counter = 0
         for x_batch, label_batch in train_loader():
-            for i in range(len(x_batch)):
-                x = x_batch[i]
-                label = label_batch[i]
-                counter += 1
-                if model_type == "GRU":
-                    h = h.data
-                model.zero_grad()
+            #for i in range(len(x_batch)):
+            #    x = x_batch[i]
+            #    label = label_batch[i]
+            x = torch.tensor(x_batch)
+            label = torch.tensor(label_batch)
+            counter += 1
+            if model_type == "GRU":
+                h = h.data
+            model.zero_grad()
 
-                out, h = model(x.to(device).float(), h)
-                #print([[float(i) for i in list(i)] for i in list(out)])
-                loss = criterion(out, label.to(device).long())
-                loss.backward()
-                optimizer.step()
-                avg_loss += loss.item()
-                if counter%200 == 0:
-                    print("Epoch {}......Step: {}/{}....... Average Loss for Epoch: {}".format(epoch, counter, len(data_keys), avg_loss/counter))
+            out, h = model(x.to(device).float(), h)
+            #print([[float(i) for i in list(i)] for i in list(out)])
+            loss = None
+            for i, lab in enumerate(label):
+                if loss == None:
+                    loss = criterion(out[i], lab.to(device).long())
+                else:
+                    loss += criterion(out[i], lab.to(device).long())
+            loss.backward()
+            optimizer.step()
+            avg_loss += loss.item()
+            if counter%200 == 0:
+                print("Epoch {}......Step: {}/{}....... Average Loss for Epoch: {}".format(epoch, counter, int(len(data_keys)/BATCH_SIZE), avg_loss/counter))
         current_time = time.time()
         print("Epoch {}/{} Done, Total Loss: {}".format(epoch, EPOCHS, avg_loss/BATCH_SIZE))
         print("Total Time Elapsed: {} seconds".format(str(current_time-start_time)))
@@ -248,7 +256,7 @@ def generate(model, top_k=1, max_length=30):
             musical_piece.append('<END>')
     return musical_piece
 
-lr = 0.001
+lr = 0.01
 gru_model = train(get_batches, lr, model_type="GRU", EPOCHS=100)
 
 genned_song = generate(gru_model)
