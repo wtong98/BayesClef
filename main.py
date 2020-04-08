@@ -4,6 +4,7 @@ serve as a script that represents the current functionality
 of the project
 '''
 from internal.music2vec import ScoreFetcher, ScoreToWord, ScoreToVec
+from internal.instantiate import to_token, to_score, chord_texture
 from internal.type_models import BayesianGaussianTypeModel
 
 import os.path
@@ -102,10 +103,14 @@ types, Z = hmm_model.sample(40)
 types = types.flatten()
 print(types)
 
-# Get randomized vector from type distribution
+token = to_token(types, myTypeModel, score_word_to_vec)
+score = to_score(token, chord_texture)
+score.show()
+
+''' old mode v
+# convert into sequence of note combinations
 vec_out = [myTypeModel.emit(i) for i in types]
 
-# convert into sequence of note combinations
 new_score = []
 for vec in vec_out:
     try:
@@ -135,3 +140,4 @@ music_representation += ' '.join(new_note_sequences)
 print(music_representation)
 # Now play new music
 converter.parse(music_representation).show()
+'''

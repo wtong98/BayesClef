@@ -17,6 +17,7 @@ import numpy as np
 # Global vars
 START_WORD = '<START>'
 END_WORD = '<END>'
+REST_WORD = '<REST>'
 
 class ScoreFetcher:
     '''
@@ -37,13 +38,13 @@ class ScoreFetcher:
         return [metadata.parse() for metadata in bundle]
 
     def load_cache(self):
-        s = open(self.save_path, 'rb').read()
-        self.scores = pickle.loads(s)
+        with open(self.save_path, 'rb') as fp:
+            self.scores = pickle.load(fp)
 
     def _save_score_cache(self):
-        s = pickle.dumps(self.scores)
         os.makedirs(os.path.dirname(self.save_path), exist_ok=True)
-        open(self.save_path, 'wb').write(s)
+        with open(self.save_path, 'wb') as fp:
+            pickle.dump(self.scores, fp)
 
 class ScoreToWord:
     '''
@@ -99,9 +100,9 @@ class ScoreToWord:
 
         return hist
 
-    def _to_word(self, notes, rest_word="XREST") -> str:
+    def _to_word(self, notes) -> str:
         if len(notes) == 0:
-            return rest_word
+            return REST_WORD
 
         ordered_notes = sorted(notes, key=lambda n: n.pitch.midi, reverse=True)
         word = '_'.join([note.name.lower() for note in ordered_notes])
