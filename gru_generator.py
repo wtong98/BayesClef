@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 import time
+import random
 import io
 
 from internal.music2vec import ScoreFetcher, ScoreToWord, ScoreToVec
@@ -72,30 +73,59 @@ class Ticker:
 
 # Will keep track of how far along we are in batch generation
 ticker = Ticker()
-def get_batches():
-    global BATCH_SIZE, SEQ_SIZE, ticker, vocab_to_int
-
-    for i in range(BATCH_SIZE):
-        # Handling looping
+def comp_training_keys():
+    global SEQ_SIZE, ticker
+    keys = []
+    not_run = True
+    while True:
+        no_run = False
+        # prevent relooping over data
+        if ticker.score_idx >= len(X_train):
+            break
+        keys.append((ticker.score_idx, ticker.place_idx))
         if ticker.place_idx > len(X_train[ticker.score_idx]) - SEQ_SIZE + 1:
             ticker.place_idx = 0
             ticker.score_idx += 1
-        if ticker.score_idx > len(X_train):
-            ticker.score_idx = 0
 
-        x_batch = X_train[ticker.score_idx][ticker.place_idx:ticker.place_idx + SEQ_SIZE]
-        label_category = y_train[ticker.score_idx][ticker.place_idx:ticker.place_idx + SEQ_SIZE]
-
-        # Now handle if unable to complete because reached end of score
-        if len(x_batch) < SEQ_SIZE:
-            deficit = SEQ_SIZE - len(x_batch)
-            x_batch += [[score_word_to_vec.embedding['<END>']] for i in range(deficit)]
-            label_category += [vocab_to_int['<END>'] for i in range(deficit)]
-
-        yield torch.tensor(x_batch), \
-                    torch.tensor(label_category)
         ticker.place_idx += 1
+    return keys
 
+data_keys = comp_training_keys()
+
+def data_from_key(score_idx, place_idx):
+    ''' Pulls training sample using Ticker format location
+    '''
+    global BATCH_SIZE, SEQ_SIZE, vocab_to_int
+    x_batch = X_train[score_idx][place_idx:place_idx + SEQ_SIZE]
+    label_category = y_train[score_idx][place_idx:place_idx + SEQ_SIZE]
+
+    # Now handle if unable to complete because reached end of score
+    if len(x_batch) < SEQ_SIZE:
+        deficit = SEQ_SIZE - len(x_batch)
+        x_batch += [[score_word_to_vec.embedding['<END>']] for i in range(deficit)]
+        label_category += [vocab_to_int['<END>'] for i in range(deficit)]
+
+    return torch.tensor(x_batch), \
+            torch.tensor(label_category)
+
+def get_batches():
+    ''' Extracts data into randomized batches
+    '''
+    global BATCH_SIZE, data_keys
+    shuffled_keys = list(range(len(data_keys)))
+    random.shuffle(shuffled_keys)
+    not_run = True
+    batch = ([], [])
+    for idx in shuffled_keys:
+        key = data_keys[idx]
+        if len(batch[0]) < BATCH_SIZE:
+            x, label = data_from_key(key[0], key[1])
+            batch[0].append(torch.tensor(x))
+            batch[1].append(torch.tensor(label))
+        else:
+            yield batch[0], batch[1]
+            x, label = data_from_key(key[0], key[1])
+            batch = ([x], [label])
 
 is_cuda = torch.cuda.is_available()
 if is_cuda:
@@ -148,20 +178,23 @@ def train(train_loader, learn_rate, hidden_dim=256, EPOCHS=20, model_type="GRU")
         h = model.init_hidden(BATCH_SIZE)
         avg_loss = 0.
         counter = 0
-        for x, label in train_loader():
-            counter += 1
-            if model_type == "GRU":
-                h = h.data
-            model.zero_grad()
+        for x_batch, label_batch in train_loader():
+            for i in range(len(x_batch)):
+                x = x_batch[i]
+                label = label_batch[i]
+                counter += 1
+                if model_type == "GRU":
+                    h = h.data
+                model.zero_grad()
 
-            out, h = model(x.to(device).float(), h)
-            #print([[float(i) for i in list(i)] for i in list(out)])
-            loss = criterion(out, label.to(device).long())
-            loss.backward()
-            optimizer.step()
-            avg_loss += loss.item()
-            if counter%200 == 0:
-                print("Epoch {}......Step: {}/{}....... Average Loss for Epoch: {}".format(epoch, counter, len(train_loader), avg_loss/counter))
+                out, h = model(x.to(device).float(), h)
+                #print([[float(i) for i in list(i)] for i in list(out)])
+                loss = criterion(out, label.to(device).long())
+                loss.backward()
+                optimizer.step()
+                avg_loss += loss.item()
+                if counter%200 == 0:
+                    print("Epoch {}......Step: {}/{}....... Average Loss for Epoch: {}".format(epoch, counter, len(data_keys), avg_loss/counter))
         current_time = time.time()
         print("Epoch {}/{} Done, Total Loss: {}".format(epoch, EPOCHS, avg_loss/BATCH_SIZE))
         print("Total Time Elapsed: {} seconds".format(str(current_time-start_time)))
