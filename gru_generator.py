@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 import time
+import random
 import io
 
 from internal.music2vec import ScoreFetcher, ScoreToWord, ScoreToVec
@@ -63,7 +64,7 @@ for score in myScoreToWord.scores:
     score_vectors = [score_word_to_vec.embedding[i] for i in score]
     score_ints = [vocab_to_int[i] for i in score]
     # TODO: Add START and STOP tokens to beginning and end
-    X_train += [[[i] for i in score_vectors[:-1]]]
+    X_train += [[i for i in score_vectors[:-1]]]
     y_train += [[i for i in score_ints[1:]]]
 
 class Ticker:
@@ -72,30 +73,59 @@ class Ticker:
 
 # Will keep track of how far along we are in batch generation
 ticker = Ticker()
-def get_batches():
-    global BATCH_SIZE, SEQ_SIZE, ticker, vocab_to_int
-
-    for i in range(BATCH_SIZE):
-        # Handling looping
+def comp_training_keys():
+    global SEQ_SIZE, ticker
+    keys = []
+    not_run = True
+    while True:
+        no_run = False
+        # prevent relooping over data
+        if ticker.score_idx >= len(X_train):
+            break
+        keys.append((ticker.score_idx, ticker.place_idx))
         if ticker.place_idx > len(X_train[ticker.score_idx]) - SEQ_SIZE + 1:
             ticker.place_idx = 0
             ticker.score_idx += 1
-        if ticker.score_idx > len(X_train):
-            ticker.score_idx = 0
 
-        x_batch = X_train[ticker.score_idx][ticker.place_idx:ticker.place_idx + SEQ_SIZE]
-        label_category = y_train[ticker.score_idx][ticker.place_idx:ticker.place_idx + SEQ_SIZE]
-
-        # Now handle if unable to complete because reached end of score
-        if len(x_batch) < SEQ_SIZE:
-            deficit = SEQ_SIZE - len(x_batch)
-            x_batch += [[score_word_to_vec.embedding['<END>']] for i in range(deficit)]
-            label_category += [vocab_to_int['<END>'] for i in range(deficit)]
-
-        yield torch.tensor(x_batch), \
-                    torch.tensor(label_category)
         ticker.place_idx += 1
+    return keys
 
+data_keys = comp_training_keys()
+
+def data_from_key(score_idx, place_idx):
+    ''' Pulls training sample using Ticker format location
+    '''
+    global BATCH_SIZE, SEQ_SIZE, vocab_to_int
+    x_batch = X_train[score_idx][place_idx:place_idx + SEQ_SIZE]
+    label_category = y_train[score_idx][place_idx:place_idx + SEQ_SIZE]
+
+    # Now handle if unable to complete because reached end of score
+    if len(x_batch) < SEQ_SIZE:
+        deficit = SEQ_SIZE - len(x_batch)
+        x_batch += [score_word_to_vec.embedding['<END>'] for i in range(deficit)]
+        label_category += [vocab_to_int['<END>'] for i in range(deficit)]
+
+    return x_batch, \
+            label_category
+
+def get_batches():
+    ''' Extracts data into randomized batches
+    '''
+    global BATCH_SIZE, data_keys
+    shuffled_keys = list(range(len(data_keys)))
+    random.shuffle(shuffled_keys)
+    not_run = True
+    batch = ([], [])
+    for idx in shuffled_keys:
+        key = data_keys[idx]
+        if len(batch[0]) < BATCH_SIZE:
+            x, label = data_from_key(key[0], key[1])
+            batch[0].append(x)
+            batch[1].append(label)
+        else:
+            yield batch[0], batch[1]
+            x, label = data_from_key(key[0], key[1])
+            batch = ([x], [label])
 
 is_cuda = torch.cuda.is_available()
 if is_cuda:
@@ -111,13 +141,16 @@ class GRUNet(nn.Module):
         self.n_layers = n_layers
 
         self.gru = nn.GRU(input_dim, hidden_dim, n_layers, batch_first=True, dropout=drop_prob)
+        self.fc_deep0 = nn.Linear(hidden_dim, hidden_dim)
         self.fc = nn.Linear(hidden_dim, output_dim)
         self.softmax = nn.Softmax()
         self.relu = nn.ReLU()
 
     def forward(self, x, h):
         out, h = self.gru(x, h)
-        out = self.softmax(self.fc(self.relu(out[:,-1])))
+        #out = self.softmax(self.fc(self.relu(out[:,-1])))
+        fc0_out = self.relu(self.fc_deep0(self.relu(out)))
+        out = self.softmax(self.fc(fc0_out))
         return out, h
 
     def init_hidden(self, batch_size):
@@ -148,7 +181,12 @@ def train(train_loader, learn_rate, hidden_dim=256, EPOCHS=20, model_type="GRU")
         h = model.init_hidden(BATCH_SIZE)
         avg_loss = 0.
         counter = 0
-        for x, label in train_loader():
+        for x_batch, label_batch in train_loader():
+            #for i in range(len(x_batch)):
+            #    x = x_batch[i]
+            #    label = label_batch[i]
+            x = torch.tensor(x_batch)
+            label = torch.tensor(label_batch)
             counter += 1
             if model_type == "GRU":
                 h = h.data
@@ -156,12 +194,17 @@ def train(train_loader, learn_rate, hidden_dim=256, EPOCHS=20, model_type="GRU")
 
             out, h = model(x.to(device).float(), h)
             #print([[float(i) for i in list(i)] for i in list(out)])
-            loss = criterion(out, label.to(device).long())
+            loss = None
+            for i, lab in enumerate(label):
+                if loss == None:
+                    loss = criterion(out[i], lab.to(device).long())
+                else:
+                    loss += criterion(out[i], lab.to(device).long())
             loss.backward()
             optimizer.step()
             avg_loss += loss.item()
             if counter%200 == 0:
-                print("Epoch {}......Step: {}/{}....... Average Loss for Epoch: {}".format(epoch, counter, len(train_loader), avg_loss/counter))
+                print("Epoch {}......Step: {}/{}....... Average Loss for Epoch: {}".format(epoch, counter, int(len(data_keys)/BATCH_SIZE), avg_loss/counter))
         current_time = time.time()
         print("Epoch {}/{} Done, Total Loss: {}".format(epoch, EPOCHS, avg_loss/BATCH_SIZE))
         print("Total Time Elapsed: {} seconds".format(str(current_time-start_time)))
