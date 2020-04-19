@@ -37,16 +37,14 @@ def should_compute(obj : object, prompt: str = 'Load cache'):
         return True
 
 
-
-
-
 print('Loading/processing scores...')
-myScoreFetcher = ScoreFetcher(SCORE_PATH)
-if should_compute(myScoreFetcher, 'Load cached scores'):
-    myScoreFetcher.fetch()
-
 myScoreToWord = ScoreToWord(SCORE_WORD_PATH)
 if should_compute(myScoreToWord, 'Load cached words'):
+    # Only load the score fetcher if you are computing words
+    myScoreFetcher = ScoreFetcher(SCORE_PATH)
+    if should_compute(myScoreFetcher, 'Load cached scores'):
+        myScoreFetcher.fetch()
+
     myScoreToWord.process(myScoreFetcher.scores)
 
 print('Training embedding model...')
