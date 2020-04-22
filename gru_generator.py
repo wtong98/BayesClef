@@ -2,7 +2,10 @@ import torch
 import torch.nn as nn
 import numpy as np
 import time
+import datetime
+import os
 import random
+import json
 import io
 
 from internal.music2vec import ScoreFetcher, ScoreToWord, ScoreToVec
@@ -18,6 +21,7 @@ SCORE_PATH = r'data/score_cache.json'
 SCORE_WORD_PATH = r'data/score_word_cache.json'
 EMBEDDING_PATH = r'data/embedding.wv'
 GRU_MODEL_PATH = r'data/gru_model.pt'
+OUTPUT_PATH = r'output/'
 
 BATCH_SIZE = 40
 SEQ_SIZE = 10
@@ -146,7 +150,7 @@ class GRUNet(nn.Module):
         self.fc_deep0 = nn.Linear(hidden_dim, hidden_dim)
         self.fc_deep1 = nn.Linear(hidden_dim, hidden_dim)
         self.fc = nn.Linear(hidden_dim, output_dim)
-        self.softmax = nn.Softmax()
+        self.softmax = nn.Softmax(dim=-1)
         self.relu = nn.ReLU()
 
     def forward(self, x, h):
@@ -245,12 +249,12 @@ def generate(model, top_k=1, max_length=30):
     curr_h = None # Starting hidden state
     while not should_stop:
         out, curr_h = model(curr_vec, curr_h)
-        softmax_out = list(out[0])
+        softmax_out = list(out[0][-1]) # get prediction for final output
         top_k_out = np.argsort(softmax_out)[-top_k:]
         # TODO: Make random selection
-        choice = top_k_out[0]
+        rand_idx = random.randint(0, top_k - 1)
+        choice = top_k_out[rand_idx]
         next_word = int_to_vocab[choice]
-        print(next_word)
         musical_piece.append(next_word)
         # now update vector
         curr_vec = torch.tensor([[score_word_to_vec.embedding[next_word]]])
@@ -266,6 +270,10 @@ lr = 0.001
 gru_model = train(get_batches, lr, model_type="GRU", EPOCHS=10)
 torch.save(gru_model.state_dict(), GRU_MODEL_PATH)
 
-genned_song = generate(gru_model, max_length=100)
-print(genned_song)
-open('song_gru_{}.json'.format(datetime.datetime.now()), 'w').write(json.dumps(genned_song))
+if not os.path.isdir(OUTPUT_PATH):
+    os.makedirs(OUTPUT_PATH)
+GEN_N = 10 # number of songs to generate
+for i in range(GEN_N):
+    genned_song = generate(gru_model, top_k=3, max_length=100)
+    print(genned_song)
+    open(OUTPUT_PATH + 'song_gru_{}.json'.format(datetime.datetime.now()), 'w').write(json.dumps(genned_song))

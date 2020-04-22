@@ -7,8 +7,11 @@ from internal.music2vec import ScoreFetcher, ScoreToWord, ScoreToVec
 from internal.instantiate import *
 from internal.type_models import BayesianGaussianTypeModel
 
+import os
 import os.path
 import pickle
+import datetime
+import json
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -21,6 +24,7 @@ SCORE_WORD_PATH = r'data/score_word_cache.json'
 EMBEDDING_PATH = r'data/embedding.wv'
 TYPE_MODEL_PATH = r'data/type_model.pickle'
 HMM_PATH = r'data/hmm.pickle'
+OUTPUT_PATH = r'output/'
 
 # Prepare for saving
 no_object_computes = True
@@ -102,5 +106,13 @@ types = types.flatten()
 print(types)
 
 token = to_token(types, myTypeModel, score_word_to_vec)
+
+# save output
+if not os.path.isdir(OUTPUT_PATH):
+    os.makedirs(OUTPUT_PATH)
+song_format = ['_'.join(i) for i in token] # put the notes together in one string
+open(OUTPUT_PATH + 'song_main_{}.json'.format(datetime.datetime.now()), 'w').write(json.dumps(song_format))
+
+# now play actual song
 score = to_score(token, chord_with_ties_texture, duration=1)
 score.show('musicxml')
