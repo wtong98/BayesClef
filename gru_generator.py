@@ -17,8 +17,9 @@ from music21 import converter
 SCORE_PATH = r'data/score_cache.json'
 SCORE_WORD_PATH = r'data/score_word_cache.json'
 EMBEDDING_PATH = r'data/embedding.wv'
+GRU_MODEL_PATH = r'data/gru_model.pt'
 
-BATCH_SIZE = 10
+BATCH_SIZE = 40
 SEQ_SIZE = 10
 LSTM_SIZE = 10
 EMBEDDING_SIZE = 32
@@ -141,7 +142,9 @@ class GRUNet(nn.Module):
         self.n_layers = n_layers
 
         self.gru = nn.GRU(input_dim, hidden_dim, n_layers, batch_first=True, dropout=drop_prob)
+        # 3 linear layers between GRU and softmax
         self.fc_deep0 = nn.Linear(hidden_dim, hidden_dim)
+        self.fc_deep1 = nn.Linear(hidden_dim, hidden_dim)
         self.fc = nn.Linear(hidden_dim, output_dim)
         self.softmax = nn.Softmax()
         self.relu = nn.ReLU()
@@ -150,7 +153,8 @@ class GRUNet(nn.Module):
         out, h = self.gru(x, h)
         #out = self.softmax(self.fc(self.relu(out[:,-1])))
         fc0_out = self.relu(self.fc_deep0(self.relu(out)))
-        out = self.softmax(self.fc(fc0_out))
+        fc1_out = self.relu(self.fc_deep1(self.relu(fc0_out)))
+        out = self.softmax(self.fc(fc1_out))
         return out, h
 
     def init_hidden(self, batch_size):
@@ -158,11 +162,11 @@ class GRUNet(nn.Module):
         hidden = weight.new(self.n_layers, batch_size, self.hidden_dim).zero_().to(device)
         return hidden
 
-def train(train_loader, learn_rate, hidden_dim=256, EPOCHS=20, model_type="GRU"):
+def train(train_loader, learn_rate, hidden_dim=32, EPOCHS=20, model_type="GRU"):
     # Setting common hyperparameters
     input_dim = EMBEDDING_SIZE
     output_dim = N_VOCAB
-    n_layers = 2
+    n_layers = 1
     # Instantiating the models
     if model_type == "GRU":
         model = GRUNet(input_dim, hidden_dim, output_dim, n_layers)
@@ -259,7 +263,9 @@ def generate(model, top_k=1, max_length=30):
     return musical_piece
 
 lr = 0.001
-gru_model = train(get_batches, lr, model_type="GRU", EPOCHS=100)
+gru_model = train(get_batches, lr, model_type="GRU", EPOCHS=10)
+torch.save(gru_model.state_dict(), GRU_MODEL_PATH)
 
-genned_song = generate(gru_model)
+genned_song = generate(gru_model, max_length=100)
 print(genned_song)
+open('song_gru_{}.json'.format(datetime.datetime.now()), 'w').write(json.dumps(genned_song))
