@@ -1,5 +1,7 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
+
 import numpy as np
 import time
 import datetime
@@ -23,9 +25,9 @@ EMBEDDING_PATH = r'data/embedding.wv'
 GRU_MODEL_PATH = r'data/gru_model.pt'
 OUTPUT_PATH = r'output/'
 
-BATCH_SIZE = 40
-SEQ_SIZE = 10
-LSTM_SIZE = 10
+BATCH_SIZE = 10
+SEQ_SIZE = 20
+LSTM_SIZE = 100
 EMBEDDING_SIZE = 32
 N_VOCAB = None # to update
 GRADIENTS_NORM = 5
@@ -65,10 +67,12 @@ for i,val in enumerate(vocab):
 chunk_size = []
 X_train = []
 y_train = []
+# TODO: Make for whole thing
+fake_score = [['<START>','g_c_e-_c','b-_b-_f_d','g_b-_g_e-','g_c_e-_c','b-_b-_f_d','g_b-_g_e-','g_c_e-_c','b-_b-_f_d','g_b-_g_e-','g_c_e-_c','b-_b-_f_d','g_b-_g_e-','g_c_e-_c','b-_b-_f_d','g_b-_g_e-','g_c_e-_c','b-_b-_f_d','g_b-_g_e-','g_c_e-_c','b-_b-_f_d','g_b-_g_e-','g_c_e-_c','b-_b-_f_d','g_b-_g_e-','g_c_e-_c','b-_b-_f_d','g_b-_g_e-','g_c_e-_c','b-_b-_f_d','g_b-_g_e-','g_c_e-_c','b-_b-_f_d','g_b-_g_e-','g_c_e-_c','b-_b-_f_d','g_b-_g_e-','g_c_e-_c','b-_b-_f_d','g_b-_g_e-','g_c_e-_c','b-_b-_f_d','g_b-_g_e-','g_c_e-_c','b-_b-_f_d','g_b-_g_e-','g_c_e-_c','b-_b-_f_d','g_b-_g_e-','c_g_e_c','<END>']]
+#for score in fake_score:
 for score in myScoreToWord.scores:
     score_vectors = [score_word_to_vec.embedding[i] for i in score]
     score_ints = [vocab_to_int[i] for i in score]
-    # TODO: Add START and STOP tokens to beginning and end
     X_train += [[i for i in score_vectors[:-1]]]
     y_train += [[i for i in score_ints[1:]]]
 
@@ -145,10 +149,9 @@ class GRUNet(nn.Module):
         self.hidden_dim = hidden_dim
         self.n_layers = n_layers
 
-        self.gru = nn.GRU(input_dim, hidden_dim, n_layers, batch_first=True, dropout=drop_prob)
+        self.gru = nn.GRU(input_dim, hidden_dim, n_layers, batch_first=True)
         # 3 linear layers between GRU and softmax
         self.fc_deep0 = nn.Linear(hidden_dim, hidden_dim)
-        self.fc_deep1 = nn.Linear(hidden_dim, hidden_dim)
         self.fc = nn.Linear(hidden_dim, output_dim)
         self.softmax = nn.Softmax(dim=-1)
         self.relu = nn.ReLU()
@@ -157,14 +160,11 @@ class GRUNet(nn.Module):
         out, h = self.gru(x, h)
         #out = self.softmax(self.fc(self.relu(out[:,-1])))
         fc0_out = self.relu(self.fc_deep0(self.relu(out)))
-        fc1_out = self.relu(self.fc_deep1(self.relu(fc0_out)))
-        out = self.softmax(self.fc(fc1_out))
+        out = F.log_softmax(self.fc(fc0_out), dim=-1)
         return out, h
 
     def init_hidden(self, batch_size):
-        weight = next(self.parameters()).data
-        hidden = weight.new(self.n_layers, batch_size, self.hidden_dim).zero_().to(device)
-        return hidden
+        return torch.zeros(1, batch_size, self.hidden_dim)
 
 def train(train_loader, learn_rate, hidden_dim=32, EPOCHS=20, model_type="GRU"):
     # Setting common hyperparameters
@@ -186,28 +186,22 @@ def train(train_loader, learn_rate, hidden_dim=32, EPOCHS=20, model_type="GRU"):
     # Start training loop
     for epoch in range(1,EPOCHS+1):
         start_time = time.time()
-        h = model.init_hidden(BATCH_SIZE)
         avg_loss = 0.
         counter = 0
         for x_batch, label_batch in train_loader():
-            #for i in range(len(x_batch)):
-            #    x = x_batch[i]
-            #    label = label_batch[i]
+            h = model.init_hidden(BATCH_SIZE)
             x = torch.tensor(x_batch)
             label = torch.tensor(label_batch)
             counter += 1
-            if model_type == "GRU":
-                h = h.data
             model.zero_grad()
 
-            out, h = model(x.to(device).float(), h)
+            out, h = model(x, h)
             #print([[float(i) for i in list(i)] for i in list(out)])
-            loss = None
+            loss = 0
             for i, lab in enumerate(label):
-                if loss == None:
-                    loss = criterion(out[i], lab.to(device).long())
-                else:
-                    loss += criterion(out[i], lab.to(device).long())
+                #print(sum([int(np.argmax(out[i][q].detach().numpy()) == lab[q]) for q in range(len(lab))])/float(len(lab)), 'correct')
+                #print('max', np.argmax(out[i][0].detach().numpy()), int(lab[0]), float(max(out[i][0])))
+                loss += criterion(out[i], lab)
             loss.backward()
             optimizer.step()
             avg_loss += loss.item()
@@ -220,25 +214,6 @@ def train(train_loader, learn_rate, hidden_dim=32, EPOCHS=20, model_type="GRU"):
     print("Total Training Time: {} seconds".format(str(sum(epoch_times))))
     return model
 
-def evaluate(model, test_x, test_y, label_scalers):
-    # NOTE: Still under construction
-    model.eval()
-    outputs = []
-    targets = []
-    start_time = time.clock()
-    for i in test_x.keys():
-        inp = torch.from_numpy(np.array(test_x[i]))
-        labs = torch.from_numpy(np.array(test_y[i]))
-        h = model.init_hidden(inp.shape[0])
-        out, h = model(inp.to(device).float(), h)
-        outputs.append(label_scalers[i].inverse_transform(out.cpu().detach().numpy()).reshape(-1))
-        targets.append(label_scalers[i].inverse_transform(labs.numpy()).reshape(-1))
-    print("Evaluation Time: {}".format(str(time.clock()-start_time)))
-    sMAPE = 0
-    for i in range(len(outputs)):
-        sMAPE += np.mean(abs(outputs[i]-targets[i])/(targets[i]+outputs[i])/2)/len(outputs)
-    print("sMAPE: {}%".format(sMAPE*100))
-    return outputs, targets, sMAPE
 
 def generate(model, top_k=1, max_length=30):
     start_word = '<START>'
@@ -267,7 +242,7 @@ def generate(model, top_k=1, max_length=30):
     return musical_piece
 
 lr = 0.001
-gru_model = train(get_batches, lr, model_type="GRU", EPOCHS=10)
+gru_model = train(get_batches, lr, hidden_dim=LSTM_SIZE, model_type="GRU", EPOCHS=100)
 torch.save(gru_model.state_dict(), GRU_MODEL_PATH)
 
 if not os.path.isdir(OUTPUT_PATH):
