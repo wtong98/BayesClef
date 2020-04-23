@@ -26,6 +26,11 @@ TYPE_MODEL_PATH = r'data/type_model.pickle'
 HMM_PATH = r'data/hmm.pickle'
 OUTPUT_PATH = r'output/'
 
+# Enables or disables the conditional generation of
+# terms by previous
+DO_CONDITIONAL_GENERATION = True
+SMOOTH_PARAM = 0.01
+
 # Prepare for saving
 no_object_computes = True
 def should_compute(obj : object, prompt: str = 'Load cache'):
@@ -55,9 +60,10 @@ print('Training embedding model...')
 score_word_to_vec = ScoreToVec(myScoreToWord.scores, path=EMBEDDING_PATH)
 
 print('Training type model...')
-myTypeModel = BayesianGaussianTypeModel(path=TYPE_MODEL_PATH)
+myTypeModel = BayesianGaussianTypeModel(path=TYPE_MODEL_PATH, embedding=score_word_to_vec.embedding,
+                  do_conditional=DO_CONDITIONAL_GENERATION, smooth=SMOOTH_PARAM)
 if not os.path.exists(TYPE_MODEL_PATH):
-    myTypeModel.fit(score_word_to_vec.embedding.vectors)
+    myTypeModel.fit(score_word_to_vec.embedding.vectors, myScoreToWord.scores)
     myTypeModel.save_model(TYPE_MODEL_PATH)
 
 labels = myTypeModel.predict(score_word_to_vec.embedding.vectors)

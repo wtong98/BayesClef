@@ -12,8 +12,12 @@ from internal.music2vec import START_WORD, END_WORD, REST_WORD
 
 
 def to_token(type_seq, type_library, word2vec_engine):
-    vecs = [type_library.emit(symbol) for symbol in type_seq]
-    words = [word2vec_engine.decode(vec) for vec in vecs]
+    vecs = []
+    words = []
+    for symbol in type_seq:
+        new_vec = type_library.emit(symbol, words) # instantiate and use previous words
+        vecs.append(new_vec)
+        words.append(word2vec_engine.decode(new_vec))
     token_seq = [word.split('_') for word in words]
 
     return token_seq
