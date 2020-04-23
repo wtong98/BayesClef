@@ -7,7 +7,7 @@ from internal.music2vec import ScoreFetcher, ScoreToWord, ScoreToVec
 
 SCORE_WORD_PATH = r'data/score_word_cache.json'
 
-REST_SYMB = 'XREST'
+REST_SYMB = '<REST>'
 
 def note_to_num(note):
     # converts a note such as f# to a number
@@ -70,6 +70,9 @@ def chord_similarity(score, test_scores, k=4):
     without unfairly assigning cost to creative differences in how the chords
     are put together in sequence.
     '''
+    # sanitize scores
+    score = [i for i in score if not i == '<START>' and not i == '<END>']
+
     # First compute all the unique k-timestep sequences
     # these are essentially equivalent to k note chords
     timesteps = Counter()
