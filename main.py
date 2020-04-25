@@ -10,6 +10,7 @@ from internal.neural import GRUTypeNet
 
 import os
 import os.path
+import sys
 import pickle
 import datetime
 import json
@@ -22,7 +23,8 @@ from music21 import converter
 
 # choices: 'gru' or 'hmm'
 TYPE_GENERATOR = 'hmm'
-
+if len(sys.argv) > 1:
+    TYPE_GENERATOR = sys.argv[1]
 
 SCORE_PATH = r'data/score_cache.json'
 SCORE_WORD_PATH = r'data/score_word_cache.json'
