@@ -9,6 +9,13 @@ to have been run and properly cached the various objects. To execute:
 python3 main.py
 ```
 
+Or to choose between `HMM` and `GRU` based type generation run either of following:
+
+```
+python3 main.py gru
+python3 main.py hmm
+```
+
 To run the GRU based generator, one must first run the above, and then run:
 
 ```
@@ -22,4 +29,5 @@ the scores cached. One does so as follows:
 
 ```
 python3 score.py path/to/generated/score.json
+python3 score.py path/to/directory/of/scores/
 ```

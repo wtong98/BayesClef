@@ -6,9 +6,11 @@ of the project
 from internal.music2vec import ScoreFetcher, ScoreToWord, ScoreToVec
 from internal.instantiate import *
 from internal.type_models import BayesianGaussianTypeModel
+from internal.neural import GRUTypeNet
 
 import os
 import os.path
+import sys
 import pickle
 import datetime
 import json
@@ -19,11 +21,17 @@ import numpy as np
 from hmmlearn import hmm
 from music21 import converter
 
+# choices: 'gru' or 'hmm'
+TYPE_GENERATOR = 'hmm'
+if len(sys.argv) > 1:
+    TYPE_GENERATOR = sys.argv[1]
+
 SCORE_PATH = r'data/score_cache.json'
 SCORE_WORD_PATH = r'data/score_word_cache.json'
 EMBEDDING_PATH = r'data/embedding.wv'
 TYPE_MODEL_PATH = r'data/type_model.pickle'
 HMM_PATH = r'data/hmm.pickle'
+GRU_PATH = r'data/type_gru_model.pt'
 OUTPUT_PATH = r'output/'
 
 # Enables or disables the conditional generation of
@@ -78,36 +86,60 @@ plt.show()
 #################
 # TODO: formalize into object
 print('Training generative model...')
-if not os.path.exists(HMM_PATH):
-    word_to_label = {}
+NUM_TYPES = 32
+if TYPE_GENERATOR == 'hmm':
+    if not os.path.exists(HMM_PATH):
+        word_to_label = {}
 
-    vocab = score_word_to_vec.vocab()
-    for word in vocab:
-        idx = vocab[word].index
-        word_to_label[word] = labels[idx]
+        vocab = score_word_to_vec.vocab()
+        for word in vocab:
+            idx = vocab[word].index
+            word_to_label[word] = labels[idx]
 
-    def _text_to_seq(text):
-        return np.array([[word_to_label[word]] for word in text])
+        def _text_to_seq(text):
+            return np.array([[word_to_label[word]] for word in text])
 
-    sequences = [_text_to_seq(text) for text in myScoreToWord.scores]
+        sequences = [_text_to_seq(text) for text in myScoreToWord.scores]
 
-    # Now actually train
-    hmm_model = hmm.MultinomialHMM(n_components=16)
-    lengths = [len(seq) for seq in sequences]
-    sequences = np.concatenate(sequences)
-    hmm_model.fit(sequences, lengths=lengths)
-    print(hmm_model.transmat_)
-    with open(HMM_PATH, "wb") as file: pickle.dump(hmm_model, file)
+        # Now actually train
+        type_gen_model = hmm.MultinomialHMM(n_components=16)
+        lengths = [len(seq) for seq in sequences]
+        sequences = np.concatenate(sequences)
+        type_gen_model.fit(sequences, lengths=lengths)
+        print(type_gen_model.transmat_)
+        with open(HMM_PATH, "wb") as file: pickle.dump(type_gen_model, file)
+    else:
+        type_gen_model = None
+        with open(HMM_PATH, "rb") as file: type_gen_model = pickle.load(file)
+elif TYPE_GENERATOR == 'gru':
+    if not os.path.exists(GRU_PATH):
+        word_to_label = {}
+        vocab = score_word_to_vec.vocab()
+        for word in vocab:
+            idx = vocab[word].index
+            word_to_label[word] = labels[idx]
+
+        def _text_to_seq(text):
+            return np.array([word_to_label[word] for word in text])
+
+        sequences = [_text_to_seq(text) for text in myScoreToWord.scores]
+
+        # Now actually train
+        type_gen_model = GRUTypeNet(input_dim=NUM_TYPES, hidden_dim=32, output_dim=NUM_TYPES)
+        type_gen_model.fit(sequences)
+        with open(GRU_PATH, "wb") as file: pickle.dump(type_gen_model, file)
+    else:
+        type_gen_model = None
+        with open(GRU_PATH, 'rb') as file: type_gen_model = pickle.load(file)
 else:
-    hmm_model = None
-    with open(HMM_PATH, "rb") as file: hmm_model = pickle.load(file)
+    print('!!!!WARN!!!! SUPPLIED TYPE GENERATOR ({}) IS NOT RECOGNIZED'.format(TYPE_GENERATOR))
 
 ###################
 # Test Generation #
 ###################
 print('Testing generation...')
 
-types, Z = hmm_model.sample(40)
+types, Z = type_gen_model.sample(40)
 types = types.flatten()
 print(types)
 
