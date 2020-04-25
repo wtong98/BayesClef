@@ -25,6 +25,6 @@ myScoreToWord.load_cache()
 for i in eval_scores:
     # Test chord_similarity metric
     print('Testing chord_similarity for {}...'.format(i[0]))
-    cost = metrics.chord_similarity(i[1], myScoreToWord.scores)
+    cost = metrics.chord_similarity(i[1], myScoreToWord.test_scores)
     print('chord_similarity', cost)
 

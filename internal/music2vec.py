@@ -1,5 +1,6 @@
 import json
 import os
+import random
 import os.path
 import pickle
 from collections import defaultdict
@@ -54,9 +55,17 @@ class ScoreToWord:
     def __init__(self, path: str = ''):
         self.save_path = path
 
-    def process(self, raw_scores):
-        self.scores = list(tqdm(self.scores_to_text(raw_scores)))
-        self._save_score_words(self.scores, self.save_path)
+    def process(self, raw_scores, test_split=0.05):
+        all_scores = list(tqdm(self.scores_to_text(raw_scores)))
+        idxes = list(range(len(all_scores)))
+        random.shuffle(idxes)
+        cutoff = int(len(all_scores)*test_split)
+        test_idxes = idxes[:cutoff]
+        train_idxes = idxes[cutoff:]
+        self.test_scores = [all_scores[i] for i in test_idxes]
+        self.scores = [all_scores[i] for i in train_idxes]
+        print('Number of scores: {} with {} test scores'.format(len(self.scores), len(self.test_scores)))
+        self._save_score_words({ 'scores': self.scores, 'test_scores': self.test_scores }, self.save_path)
 
     def scores_to_text(self, scores, sampling_rate=0.5):
         for score in scores:
@@ -119,7 +128,9 @@ class ScoreToWord:
 
     def load_cache(self):
         raw_text = open(self.save_path, 'r').read()
-        self.scores = json.loads(raw_text)
+        data = json.loads(raw_text)
+        self.scores = data['scores']
+        self.test_scores = data['test_scores']
 
 
 class ScoreToVec:

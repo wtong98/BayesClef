@@ -40,18 +40,13 @@ DO_CONDITIONAL_GENERATION = True
 SMOOTH_PARAM = 0.01
 
 # Prepare for saving
-no_object_computes = True
 def should_compute(obj : object, prompt: str = 'Load cache'):
-    global no_object_computes
-    if no_object_computes:
-        inp = input(prompt + ' [y/n]?')
-        if len(inp) > 0 and inp[0] == 'n':
-            no_object_computes = False
-            return True
-        obj.load_cache()
-        return False
-    else:
+    inp = input(prompt + ' [y/n]?')
+    if len(inp) > 0 and inp[0] == 'n':
+        no_object_computes = False
         return True
+    obj.load_cache()
+    return False
 
 
 print('Loading/processing scores...')
@@ -62,7 +57,7 @@ if should_compute(myScoreToWord, 'Load cached words'):
     if should_compute(myScoreFetcher, 'Load cached scores'):
         myScoreFetcher.fetch()
 
-    myScoreToWord.process(myScoreFetcher.scores)
+    myScoreToWord.process(myScoreFetcher.scores, test_split=0.05)
 
 print('Training embedding model...')
 score_word_to_vec = ScoreToVec(myScoreToWord.scores, path=EMBEDDING_PATH)
@@ -125,8 +120,8 @@ elif TYPE_GENERATOR == 'gru':
         sequences = [_text_to_seq(text) for text in myScoreToWord.scores]
 
         # Now actually train
-        type_gen_model = GRUTypeNet(input_dim=NUM_TYPES, hidden_dim=32, output_dim=NUM_TYPES)
-        type_gen_model.fit(sequences)
+        type_gen_model = GRUTypeNet(input_dim=NUM_TYPES, hidden_dim=16, output_dim=NUM_TYPES)
+        type_gen_model.fit(sequences, EPOCHS=40)
         with open(GRU_PATH, "wb") as file: pickle.dump(type_gen_model, file)
     else:
         type_gen_model = None
