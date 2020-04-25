@@ -35,7 +35,7 @@ class BayesianGaussianTypeModel(TypeModel):
         ''' embedding = Word2Vec style embedding
         '''
         self.embedding = embedding
-        self.n_gram = 1 # set it to be a 1-gram model
+        self.n_grams = [2, 3] # set up for 2 and 3-gram combo
         self.do_conditional = do_conditional
         self.smooth = smooth
         self.n = n_components
@@ -52,12 +52,13 @@ class BayesianGaussianTypeModel(TypeModel):
         self.mixture.fit(vectors)
         # Fit conditional dependence model
         # Compute n-gram model
-        gram_map = defaultdict(Counter)
+        gram_map = { 2: defaultdict(Counter), 3: defaultdict(Counter) }
         for score in scores:
-            for i in range(len(score)-self.n_gram):
-                followed = score[i+self.n_gram]
-                gram = tuple(score[i:i+self.n_gram])
-                gram_map[gram][followed] += 1
+            for n_gram in self.n_grams:
+                for i in range(len(score)-n_gram+1):
+                    followed = score[i+n_gram-1]
+                    gram = tuple(score[i:i+n_gram-1])
+                    gram_map[n_gram][gram][followed] += 1
         self.gram_map = gram_map
         
 
@@ -70,9 +71,11 @@ class BayesianGaussianTypeModel(TypeModel):
             not strictly a PDF but rather a constant
             scaling of one
         '''
-        prev_key = tuple(prev_words[-self.n_gram:])
-        followers = self.gram_map[prev_key]
-        smooth_count = followers[option] + self.smooth
+        smooth_count = 0
+        for n_gram in self.n_grams:
+            prev_key = tuple(prev_words[-(n_gram-1):])
+            followers = self.gram_map[n_gram][prev_key]
+            smooth_count += followers[option]*((n_gram-1)**2) + self.smooth
         # TODO: Maybe make into a true pmf (i.e. sum to 1) but 
         # this won't improve results or change anything
         return smooth_count
