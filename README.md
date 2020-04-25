@@ -31,3 +31,9 @@ the scores cached. One does so as follows:
 python3 score.py path/to/generated/score.json
 python3 score.py path/to/directory/of/scores/
 ```
+
+## Other utilities
+
+`python3 baseline.py` uses the currently cached training scores to do an independent
+empirical drawing of words to produce a piece of music. This represents a system which
+has learned nothing about how a piece of music works together.
