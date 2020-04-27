@@ -1,5 +1,6 @@
 import metrics
 import sys
+import numpy as np
 import os
 import json
 from internal.music2vec import ScoreFetcher, ScoreToWord, ScoreToVec
@@ -22,9 +23,16 @@ print('Loading test scores...')
 myScoreToWord = ScoreToWord(SCORE_WORD_PATH)
 myScoreToWord.load_cache()
 
+all_costs = []
 for i in eval_scores:
     # Test chord_similarity metric
     print('Testing chord_similarity for {}...'.format(i[0]))
     cost = metrics.chord_similarity(i[1], myScoreToWord.test_scores)
     print('chord_similarity', cost)
+    all_costs.append(cost)
+if len(all_costs) > 1:
+    z_score = 1.96
+    std = np.std(all_costs)
+    mean = np.mean(all_costs)
+    print('{:.2f} \pm {:.2f}'.format(mean, std*z_score))
 
