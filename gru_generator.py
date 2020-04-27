@@ -242,7 +242,7 @@ def generate(model, top_k=1, max_length=30):
     return musical_piece
 
 lr = 0.001
-gru_model = train(get_batches, lr, hidden_dim=LSTM_SIZE, model_type="GRU", EPOCHS=100)
+gru_model = train(get_batches, lr, hidden_dim=LSTM_SIZE, model_type="GRU", EPOCHS=80)
 torch.save(gru_model.state_dict(), GRU_MODEL_PATH)
 
 if not os.path.isdir(OUTPUT_PATH):

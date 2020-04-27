@@ -75,7 +75,7 @@ class BayesianGaussianTypeModel(TypeModel):
         for n_gram in self.n_grams:
             prev_key = tuple(prev_words[-(n_gram-1):])
             followers = self.gram_map[n_gram][prev_key]
-            smooth_count += followers[option]*((n_gram-1)**2) + self.smooth
+            smooth_count += followers[option] + self.smooth #*((n_gram-1)**2) + self.smooth
         # TODO: Maybe make into a true pmf (i.e. sum to 1) but 
         # this won't improve results or change anything
         return smooth_count

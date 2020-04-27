@@ -18,7 +18,7 @@ for i in myScoreToWord.scores:
     for wrd in i:
         all_words.append(wrd)
 
-PIECE_LENGTH = 40
+PIECE_LENGTH = 100
 musical_piece = []
 for i in range(PIECE_LENGTH):
     idx = random.randint(0, len(all_words)-1)

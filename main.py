@@ -40,10 +40,8 @@ DO_CONDITIONAL_GENERATION = True
 SMOOTH_PARAM = 0.01
 
 # Prepare for saving
-def should_compute(obj : object, prompt: str = 'Load cache'):
-    inp = input(prompt + ' [y/n]?')
-    if len(inp) > 0 and inp[0] == 'n':
-        no_object_computes = False
+def should_compute(obj : object, filename: str):
+    if not os.path.exists(filename):
         return True
     obj.load_cache()
     return False
@@ -51,10 +49,11 @@ def should_compute(obj : object, prompt: str = 'Load cache'):
 
 print('Loading/processing scores...')
 myScoreToWord = ScoreToWord(SCORE_WORD_PATH)
-if should_compute(myScoreToWord, 'Load cached words'):
+myScoreToWord.load_cache()
+if should_compute(myScoreToWord, SCORE_WORD_PATH):
     # Only load the score fetcher if you are computing words
     myScoreFetcher = ScoreFetcher(SCORE_PATH)
-    if should_compute(myScoreFetcher, 'Load cached scores'):
+    if should_compute(myScoreFetcher, SCORE_PATH):
         myScoreFetcher.fetch()
 
     myScoreToWord.process(myScoreFetcher.scores, test_split=0.05)
@@ -121,7 +120,7 @@ elif TYPE_GENERATOR == 'gru':
 
         # Now actually train
         type_gen_model = GRUTypeNet(input_dim=NUM_TYPES, hidden_dim=16, output_dim=NUM_TYPES)
-        type_gen_model.fit(sequences, EPOCHS=40)
+        type_gen_model.fit(sequences, EPOCHS=10)
         with open(GRU_PATH, "wb") as file: pickle.dump(type_gen_model, file)
     else:
         type_gen_model = None
@@ -134,17 +133,19 @@ else:
 ###################
 print('Testing generation...')
 
-types, Z = type_gen_model.sample(40)
-types = types.flatten()
-print(types)
+NUM_TO_GEN = 10
+for i in range(NUM_TO_GEN):
+    types, Z = type_gen_model.sample(100)
+    types = types.flatten()
+    print(types)
 
-token = to_token(types, myTypeModel, score_word_to_vec)
+    token = to_token(types, myTypeModel, score_word_to_vec)
 
-# save output
-if not os.path.isdir(OUTPUT_PATH):
-    os.makedirs(OUTPUT_PATH)
-song_format = ['_'.join(i) for i in token] # put the notes together in one string
-open(OUTPUT_PATH + 'song_main_{}.json'.format(datetime.datetime.now()), 'w').write(json.dumps(song_format))
+    # save output
+    if not os.path.isdir(OUTPUT_PATH):
+        os.makedirs(OUTPUT_PATH)
+    song_format = ['_'.join(i) for i in token] # put the notes together in one string
+    open(OUTPUT_PATH + 'song_main_{}.json'.format(datetime.datetime.now()), 'w').write(json.dumps(song_format))
 
 # now play actual song
 score = to_score(token, chord_with_ties_texture, duration=1)
