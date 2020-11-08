@@ -1,4 +1,10 @@
 # Music Composition with Bayesian Program Learning
+We apply the [Bayesian Program Learning](https://science.sciencemag.org/content/350/6266/1332) 
+framework to a music composition context. 
+
+For details, check out our [writeup](https://drive.google.com/file/d/1-qiL9f9q0C35HLltZ0pOTgOAutBq8K63/view?usp=sharing).
+
+Music samples are available [here](https://drive.google.com/drive/folders/1YnEc5bMvp6mEuBeyaldk5hdHaiaz0zAG?usp=sharing).
 
 ## Running System
 
