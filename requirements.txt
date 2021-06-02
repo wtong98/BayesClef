@@ -39,5 +39,5 @@ sklearn==0.0
 smart-open==1.9.0
 tqdm==4.43.0
 traitlets==4.3.3
-urllib3==1.25.8
+urllib3==1.26.5
 wcwidth==0.1.8
